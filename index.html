@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7fb">
+<title>汉 · Китайский</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- ═══════════════════════════════════════════════════════════════════════════════════
+     hanzi — офлайн-приложение для изучения китайского языка.
+     Всё приложение в этом файле: разметка, стили, логика. Зависимостей нет.
+     Открывать только через локальный сервер (bash tools/serve.sh), не двойным кликом.
+
+     КАРТА КОДА (всё в js/, подключается через js/main.js):
+       data/       словарь, уроки грамматики, разговоры, уроки пиньиня, слоги,
+                   правила черт, программа месяца — только списки, без логики
+       core/       constants, state, db (IndexedDB), srs (SM-2), pinyin, speech,
+                   strokes, modes, stats
+       ui/         по экрану на файл: home, train, dict, grammar, strokes-screen,
+                   syllables-screen, teacher-*, progress и общие dom/icons/screens
+       main.js     запуск: загрузка данных, привязка событий, первый экран
+     ═══════════════════════════════════════════════════════════════════════════════════ -->
+
+<style>
+/* ═══════════════════ CSS — дизайн-система Halo ═══════════════════
+   Светлый воздушный visionOS-стиль: парящие стеклянные острова над мягким свечением,
+   один акцент-градиент (лаванда → небо), крупные радиусы, многослойные тени, Inter.
+   Токены перенесены из общей дизайн-системы (AI/consultant/Знания/design-system).
+   Шрифт лежит рядом в app/fonts — из интернета ничего не грузится.                    */
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+2122, U+2191,
+                 U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-cyrillic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+:root {
+  /* Поверхности */
+  --bg: #f6f7fb;
+  --surface: rgba(255, 255, 255, .62);
+  --surface-strong: rgba(255, 255, 255, .82);
+  --surface-soft: rgba(255, 255, 255, .42);
+  --line: rgba(20, 22, 38, .06);
+  --line-strong: rgba(20, 22, 38, .10);
+  --glass-blur: 28px;
+
+  /* Текст */
+  --ink: #1a1a1f;
+  --ink-soft: #43434b;
+  --ink-faint: #6b6b75;
+  --ink-ghost: #9a9aa3;
+
+  /* Акцент */
+  --accent: #7c82f4;
+  --accent-1: #a78bfa;
+  --accent-2: #60a5fa;
+  --accent-gradient: linear-gradient(135deg, #a78bfa 0%, #60a5fa 100%);
+  --accent-soft: rgba(124, 130, 244, .12);
+
+  /* Семантика */
+  --surface-solid: rgba(250, 250, 253, .96);   /* шапка и таб-бар: контент под ними не просвечивает */
+  --ok: #1aa874;
+  --ok-soft: rgba(26, 168, 116, .12);
+  --tone-warn: #e09415;
+  --tone-warn-soft: rgba(224, 148, 21, .14);
+  --err: #e0455b;
+  --err-soft: rgba(224, 69, 91, .12);
+
+  /* Шрифты */
+  --font-latin: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-hanzi: "Noto Sans SC", "Source Han Sans SC", "PingFang SC",
+                "Microsoft YaHei", "Noto Serif CJK SC", "WenQuanYi Micro Hei", sans-serif;
+
+  /* Радиусы */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Тени: многослойные, «парящие» */
+  --shadow-1: 0 1px 0 rgba(255,255,255,.85) inset, 0 1px 2px rgba(20,22,38,.04),
+              0 8px 24px -8px rgba(20,22,38,.10);
+  --shadow-2: 0 1px 0 rgba(255,255,255,.9) inset, 0 2px 6px rgba(20,22,38,.05),
+              0 16px 40px -12px rgba(20,22,38,.14), 0 32px 80px -24px rgba(60,80,160,.10);
+  --shadow-3: 0 1px 0 rgba(255,255,255,.95) inset, 0 4px 12px rgba(20,22,38,.06),
+              0 24px 56px -16px rgba(20,22,38,.18), 0 48px 100px -30px rgba(60,80,160,.14);
+  --shadow-accent: 0 1px 0 rgba(255,255,255,.4) inset, 0 8px 24px -6px rgba(124,130,244,.45),
+                   0 16px 48px -16px rgba(124,130,244,.35);
+
+  --ease-spring: cubic-bezier(.22, 1, .36, 1);
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* Тёмный вариант той же системы: то же стекло, только над глубоким фоном. */
+html[data-theme="dark"] {
+  --bg: #0f1117;
+  --surface: rgba(255, 255, 255, .06);
+  --surface-strong: rgba(255, 255, 255, .10);
+  --surface-soft: rgba(255, 255, 255, .04);
+  --line: rgba(255, 255, 255, .09);
+  --line-strong: rgba(255, 255, 255, .16);
+
+  --ink: #f2f3f7;
+  --ink-soft: #c3c5d0;
+  --ink-faint: #9a9cab;
+  --ink-ghost: #71737f;
+
+  --accent: #8f95ff;
+  --accent-soft: rgba(143, 149, 255, .18);
+  --surface-solid: rgba(20, 22, 30, .96);
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, .16);
+  --tone-warn: #fbbf24;
+  --tone-warn-soft: rgba(251, 191, 36, .16);
+  --err: #fb7185;
+  --err-soft: rgba(251, 113, 133, .16);
+
+  --shadow-1: 0 1px 0 rgba(255,255,255,.05) inset, 0 8px 24px -8px rgba(0,0,0,.6);
+  --shadow-2: 0 1px 0 rgba(255,255,255,.06) inset, 0 16px 40px -12px rgba(0,0,0,.7);
+  --shadow-3: 0 1px 0 rgba(255,255,255,.07) inset, 0 24px 56px -16px rgba(0,0,0,.75);
+  --shadow-accent: 0 8px 24px -6px rgba(124,130,244,.5);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--font-latin);
+  letter-spacing: -.005em;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* ——— Ambient: мягкое свечение под всем интерфейсом ——— */
+.scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.scene .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; }
+.scene .b1 { width: 46vw; height: 46vw; top: -8vw; left: -6vw;
+  background: radial-gradient(circle, #d6e2ff 0%, transparent 70%); }
+.scene .b2 { width: 38vw; height: 38vw; top: 12%; right: -6vw;
+  background: radial-gradient(circle, #e1d2ff 0%, transparent 70%); }
+.scene .b3 { width: 40vw; height: 40vw; bottom: -10vw; left: 22%;
+  background: radial-gradient(circle, #d8e8ff 0%, transparent 70%); opacity: .45; }
+html[data-theme="dark"] .scene .blob { opacity: .16; }
+
+.hanzi { font-family: var(--font-hanzi); letter-spacing: .04em; }
+.num { font-variant-numeric: tabular-nums; }
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ——— Стеклянная шапка-остров ——— */
+/* Полоска над плавающей шапкой: без неё в зазоре сверху мелькает уезжающий текст. */
+body::before {
+  content: ""; position: fixed; top: 0; left: 0; right: 0; height: 14px;
+  background: var(--bg); z-index: 25; pointer-events: none;
+}
+
+.app-header {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 30;
+  width: min(720px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 10px 8px 18px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+}
+.app-logo {
+  font-family: var(--font-hanzi); font-size: 22px; line-height: 1;
+  background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.app-title { flex: 1; font-size: 14px; font-weight: 500; color: var(--ink-soft); letter-spacing: -.01em; }
+
+.icon-btn {
+  width: 38px; height: 38px; border-radius: var(--r-pill);
+  display: grid; place-items: center; font-size: 17px; color: var(--ink-soft);
+  transition: background .2s var(--ease-out), transform .2s var(--ease-spring);
+}
+.icon-btn:hover { background: var(--surface); }
+
+main {
+  position: relative; z-index: 1;
+  max-width: 720px; margin: 0 auto;
+  /* Отступ сверху считается от реальной высоты шапки (её задаёт JS): при крупном
+     системном шрифте шапка выше, и фиксированные 84px оставляли контент под ней. */
+  padding: calc(var(--header-h, 60px) + 26px) 16px 124px;
+}
+.screen { display: none; }
+.screen.is-active { display: block; animation: rise .28s var(--ease-spring); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ——— Нижняя навигация: парящий остров ——— */
+.tabbar {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  width: min(560px, calc(100vw - 24px));
+  display: flex; gap: 2px; padding: 6px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-3);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+}
+.tab {
+  flex: 1; min-height: 56px; border-radius: var(--r-pill);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--ink-faint); font-size: 11px; font-weight: 500;
+  transition: color .2s var(--ease-out), background .2s var(--ease-out);
+}
+.tab-icon { font-size: 17px; line-height: 1; display: flex; align-items: center; justify-content: center; height: 20px; }
+/* Значки интерфейса рисуем сами (SVG), поэтому они наследуют цвет строки и не зависят от шрифта */
+.ui-icon { flex: none; vertical-align: -.18em; }
+.btn-round .ui-icon, .icon-btn .ui-icon, .tab-icon .ui-icon, .badge .ui-icon { margin: 0; }
+.btn-round, .icon-btn { display: inline-flex; align-items: center; justify-content: center; }
+.badge { display: inline-flex; align-items: center; gap: 4px; }
+.tab:hover { color: var(--ink); }
+.tab[aria-current="page"] { color: #fff; background: var(--accent-gradient); box-shadow: var(--shadow-accent); }
+html[data-theme="dark"] .tab[aria-current="page"] { color: #0f1117; }
+
+/* ——— Типографика ——— */
+h1 { font-size: 30px; font-weight: 600; letter-spacing: -.022em; line-height: 1.1; margin: 0 0 12px; }
+h2 { font-size: 20px; font-weight: 600; letter-spacing: -.012em; margin: 36px 0 14px; }
+h3 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+p { margin: 0 0 12px; }
+.muted { color: var(--ink-soft); }
+.faint { color: var(--ink-faint); font-size: 13.5px; }
+.center { text-align: center; }
+
+/* ——— Стеклянная карточка ——— */
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  padding: 24px;
+}
+.card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 30%);
+  opacity: .8;
+}
+html[data-theme="dark"] .card::before { opacity: .12; }
+.card > * { position: relative; }
+.card + .card { margin-top: 16px; }
+
+/* ——— Кнопки ——— */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 24px;
+  border-radius: var(--r-pill);
+  background: var(--accent-gradient); color: #fff;
+  font-weight: 600; font-size: 15px; letter-spacing: -.005em;
+  box-shadow: var(--shadow-accent);
+  transition: transform .25s var(--ease-spring), filter .25s var(--ease-out), box-shadow .25s var(--ease-out);
+}
+.btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; filter: none; }
+.btn-wide { width: 100%; }
+.btn-small { min-height: 38px; padding: 0 16px; font-size: 13.5px; font-weight: 500; gap: 6px; }
+/* значок в маленькой кнопке стоит ближе к подписи, чем в большой */
+
+.btn-quiet {
+  background: var(--surface-strong); color: var(--ink);
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  font-weight: 500;
+}
+.btn-quiet:hover { filter: none; box-shadow: var(--shadow-2); }
+.btn-danger {
+  background: var(--err-soft); color: var(--err);
+  border: 1px solid transparent; box-shadow: none; font-weight: 500;
+}
+.btn-danger:hover { filter: none; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row-between { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.stack > * + * { margin-top: 14px; }
+
+/* ——— Поля ——— */
+input[type="text"], input[type="search"], textarea, select {
+  width: 100%; min-height: 48px; padding: 12px 16px;
+  background: var(--surface-strong); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  outline: none; transition: border-color .2s var(--ease-out), box-shadow .2s var(--ease-out);
+}
+input[type="text"]:focus, input[type="search"]:focus, textarea:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft);
+}
+textarea { min-height: 170px; resize: vertical; font-family: var(--font-hanzi); }
+label { display: block; font-size: 13px; font-weight: 500; color: var(--ink-soft); margin-bottom: 6px; }
+.field + .field { margin-top: 16px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+/* ——— Чипы ——— */
+.chip {
+  padding: 9px 16px; border-radius: var(--r-pill);
+  background: var(--surface-strong); border: 1px solid var(--line);
+  font-size: 13.5px; font-weight: 500; color: var(--ink-soft);
+  box-shadow: var(--shadow-1);
+  transition: transform .2s var(--ease-spring), color .2s var(--ease-out);
+  white-space: nowrap;
+}
+.chip:hover { transform: translateY(-1px); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--accent-gradient); color: #fff; border-color: transparent; box-shadow: var(--shadow-accent); }
+html[data-theme="dark"] .chip[aria-pressed="true"] { color: #0f1117; }
+.chip-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: none; }
+.chip-scroll::-webkit-scrollbar { display: none; }
+
+/* ——— Главная ——— */
+.today-count { font-size: 16px; font-weight: 500; color: var(--ink-soft); margin-bottom: 8px; }
+.today-count b {
+  display: block; font-size: 56px; font-weight: 600; line-height: 1.05; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mode-btn {
+  min-height: 84px; padding: 12px 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1); color: var(--ink-soft); font-size: 12px; font-weight: 500; text-align: center;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .25s var(--ease-spring), box-shadow .25s var(--ease-out);
+}
+.mode-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.mode-btn .mode-icon { font-size: 22px; line-height: 1; }
+.mode-btn[aria-pressed="true"] {
+  color: var(--accent); border-color: transparent;
+  background: var(--surface-strong); box-shadow: var(--shadow-2), 0 0 0 2px var(--accent) inset;
+}
+.mode-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ——— Тренировка ——— */
+.progress-line {
+  height: 6px; background: var(--surface-strong); border: 1px solid var(--line);
+  border-radius: var(--r-pill); overflow: hidden; margin-bottom: 24px;
+}
+.progress-line span { display: block; height: 100%; background: var(--accent-gradient); transition: width .3s var(--ease-spring); }
+
+.train-card {
+  position: relative;
+  max-width: 560px; margin: 0 auto 20px; min-height: 240px; padding: 36px 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  text-align: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl);
+  box-shadow: var(--shadow-3);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  transition: border-color .2s var(--ease-out), background .2s var(--ease-out);
+}
+.train-card.is-ok { border-color: var(--ok); background: var(--ok-soft); }
+.train-card.is-err { border-color: var(--err); background: var(--err-soft); }
+.train-card.is-tone { border-color: var(--tone-warn); background: var(--tone-warn-soft); }
+
+.big-hanzi { font-family: var(--font-hanzi); font-size: clamp(64px, 17vw, 132px); line-height: 1.1; letter-spacing: .04em; }
+.card-pinyin { font-size: 23px; font-weight: 500; color: var(--ink-soft); letter-spacing: -.01em; }
+.card-translation { font-size: 19px; }
+.card-question { font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
+
+.options { display: grid; gap: 10px; max-width: 560px; margin: 0 auto; }
+.option {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  min-height: 58px; padding: 12px 18px; text-align: left;
+  background: var(--surface-strong); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out), border-color .2s var(--ease-out);
+}
+.option:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-2); border-color: var(--line-strong); }
+.option-key {
+  width: 26px; height: 26px; flex: none; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; font-size: 12.5px; font-weight: 600;
+}
+.option.is-ok { border-color: var(--ok); background: var(--ok-soft); }
+.option.is-err { border-color: var(--err); background: var(--err-soft); }
+.card.is-ok { border-color: var(--ok); }
+.card.is-err { border-color: var(--err); }
+.option .hanzi { font-size: 26px; }
+.option-tone { font-size: 22px; font-weight: 600; }
+
+.verdict { max-width: 560px; margin: 14px auto 0; text-align: center; min-height: 26px; font-size: 15px; font-weight: 500; }
+.verdict.is-ok { color: var(--ok); }
+.verdict.is-err { color: var(--err); }
+.verdict.is-tone { color: var(--tone-warn); }
+
+.hint-keys { text-align: center; color: var(--ink-ghost); font-size: 12.5px; margin-top: 28px; }
+.speak-btn {
+  width: 54px; height: 54px; border-radius: var(--r-pill);
+  background: var(--surface-strong); border: 1px solid var(--line);
+  box-shadow: var(--shadow-1); font-size: 20px; display: grid; place-items: center; margin: 0 auto;
+  transition: transform .25s var(--ease-spring), box-shadow .25s var(--ease-out);
+}
+.speak-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.speak-btn.is-big { width: 104px; height: 104px; font-size: 38px; background: var(--accent-gradient); border-color: transparent; box-shadow: var(--shadow-accent); }
+
+/* ——— Пример предложения ——— */
+.sentence { font-family: var(--font-hanzi); font-size: 22px; line-height: 1.85; }
+.sentence button {
+  font-family: inherit; font-size: inherit; padding: 0 2px; border-radius: 6px; color: inherit;
+  border-bottom: 1px dashed var(--line-strong);
+  transition: background .15s var(--ease-out);
+}
+.sentence button:hover { background: var(--accent-soft); border-bottom-color: var(--accent); }
+.sentence-pinyin { color: var(--ink-faint); font-size: 14.5px; }
+.sentence-translation { font-size: 15px; }
+
+/* ——— Всплывающая карточка снизу ——— */
+.sheet {
+  position: fixed; left: 50%; transform: translate(-50%, 120%); z-index: 40;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  width: min(560px, calc(100vw - 24px));
+  padding: 26px 20px;
+  background: var(--surface-strong); border: 1px solid var(--line);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-3);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  transition: transform .3s var(--ease-spring);
+}
+.sheet.is-open { transform: translate(-50%, 0); }
+.sheet-inner { text-align: center; }
+.sheet-syllable { font-size: 46px; font-weight: 500; letter-spacing: -.01em; margin-bottom: 4px; }
+
+/* ——— Таблица слогов ———
+   Сетка широкая по своей природе: 21 инициаль в ряд. Прокручивается она сама,
+   страница по горизонтали не едет. Первый столбец приклеен, чтобы не потерять финаль. */
+.syllable-scroll {
+  overflow-x: auto; overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px; padding: 4px 4px 10px;
+  border-radius: var(--r-lg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.syllable-scroll::-webkit-scrollbar { height: 10px; }
+.syllable-scroll::-webkit-scrollbar-track { background: transparent; }
+.syllable-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong); border-radius: 999px;
+  border: 3px solid transparent; background-clip: padding-box;
+}
+.syllable-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
+.syllable-table { border-collapse: separate; border-spacing: 3px; font-size: 12.5px; }
+.syllable-table th {
+  font-weight: 500; color: var(--ink-faint); font-size: 11.5px; padding: 2px 4px;
+  text-align: center; white-space: nowrap;
+}
+/* Шапку с инициалями липкой НЕ делаем: она повисает поверх строк и закрывает их
+   (жалоба владельца 15.08.2026). Колонка и так читается — в клетке написан весь слог. */
+.syllable-table th.final {
+  text-align: right; padding-right: 8px;
+  color: var(--ink-soft); font-weight: 600;
+}
+.syllable-table td { padding: 0; }
+.syllable-cell {
+  display: block; width: 100%; min-width: 46px; min-height: 34px; padding: 0 7px;
+  background: var(--surface-strong); border: 1px solid var(--line-strong); border-radius: 10px;
+  color: var(--ink); font-size: 13px; font-weight: 500; white-space: nowrap;
+  box-shadow: var(--shadow-1);
+  transition: transform .2s var(--ease-spring), border-color .2s var(--ease-out);
+}
+.syllable-cell:hover { transform: translateY(-1px); border-color: var(--accent); }
+.syllable-cell:active { transform: translateY(0); }
+/* Состояние слога видно прямо в таблице: изучен — зелёный, начат или с ошибками — янтарный */
+.syllable-cell.is-learned { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+.syllable-cell.is-work { border-color: var(--tone-warn); background: var(--tone-warn-soft); }
+
+/* Внутри раздела слогов блоки идут вперемешку — карточки, списки вариантов, заголовки,
+   ленты чипов. Правила «.card + .card» тут мало: задаём отступ между любыми соседями,
+   иначе блоки слипаются (жалоба владельца 15.08.2026). */
+#syllable-drill-body > * + * { margin-top: 16px; }
+#pinyin-drill-list > * + * { margin-top: 14px; }
+#pinyin-drill-list > h3 { margin-top: 30px; margin-bottom: 6px; }
+#pinyin-drill-list > p { margin-bottom: 0; }
+#pinyin-table > * + * { margin-top: 14px; }
+
+/* ——— Разбор слова по знакам ——— */
+.word-parts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 14px 0 4px; }
+.word-part {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 12px; min-width: 74px;
+  background: var(--surface-strong); border: 1px solid var(--line); border-radius: var(--r-lg);
+  font-size: 12px; line-height: 1.3;
+}
+.word-part .hanzi { font-size: 26px; line-height: 1.1; }
+.word-part:hover { border-color: var(--accent); }
+
+/* ——— Занятие дня ——— */
+#daily-card { display: block; margin-bottom: 16px; }
+.daily-steps { display: grid; gap: 8px; margin-top: 12px; }
+
+/* ——— Режим учителя ——— */
+#teacher-card { display: block; margin-bottom: 16px; }
+/* Карточка программы — единственная с крупным рисунком: она должна выделяться */
+.teacher-home-top { display: flex; align-items: center; gap: 14px; }
+.teacher-home-text { flex: 1; min-width: 0; }
+.teacher-figure { flex: none; color: var(--ink-soft); }
+.lesson-row.is-current { border-color: var(--accent); box-shadow: var(--shadow-accent); }
+.day-words { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px; margin-top: 12px; }
+.day-word {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 10px 8px; min-width: 0; text-align: center;
+  background: var(--surface-strong); border: 1px solid var(--line); border-radius: var(--r-lg);
+  font-size: 11.5px; line-height: 1.3;
+}
+.day-word .hanzi { font-size: 24px; line-height: 1.1; }
+.day-word .pinyin { font-size: 11.5px; color: var(--ink-soft); }
+.day-word .word-note { font-size: 10px; color: var(--accent); margin-top: 2px; }
+/* Свёрнутый день в прописях занятия */
+.day-fold { display: flex; align-items: center; justify-content: space-between; width: 100%;
+  gap: 12px; padding: 0; background: none; border: 0; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; }
+.fold-arrow { display: inline-flex; color: var(--ink-faint); transition: transform .2s var(--ease-out); }
+.fold-arrow.is-open { transform: rotate(180deg); }
+.step-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Экран задания: между карточкой, полем ввода и кнопками должен быть воздух */
+#teacher-task-body > * + * { margin-top: 14px; }
+#teacher-task-body .center { margin-top: 18px; }
+#teacher-task-body input[type="text"] { margin-top: 14px; }
+/* Кнопки ответа идут стопкой: между ними нужен зазор, иначе слипаются */
+#teacher-task-body .center .btn-wide + .btn-wide { margin-top: 10px; }
+/* Кнопки стопкой встречаются на всех итоговых экранах — зазор нужен везде */
+.card .btn-wide + .btn-wide { margin-top: 10px; }
+/* ——— Ранг ученика (段位) ——— */
+.rank-row { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
+.rank-titles { flex: 1; min-width: 0; }
+.rank-hanzi { font-size: 26px; line-height: 1.15; }
+.rank-pinyin { font-size: 13px; color: var(--ink-soft); }
+.rank-art { flex: none; }
+/* девятая ступень — единственная со свечением: это финал */
+.rank-card.is-top .rank-art { filter: drop-shadow(0 0 10px rgba(245, 209, 105, .55)); }
+.badge-beast { font-size: 18px; line-height: 1.25; }
+.sound-play .ui-icon { margin: 0; }
+.day-word:hover { border-color: var(--accent); }
+/* слово, которое звучит прямо сейчас */
+.day-word.is-speaking { border-color: var(--accent); box-shadow: var(--shadow-accent); }
+.card.is-ok { border-color: var(--ok); }
+.daily-step {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 14px; border-radius: var(--r-lg);
+  background: var(--surface-strong); border: 1px solid var(--line);
+  transition: transform .2s var(--ease-spring), border-color .2s var(--ease-out);
+}
+.daily-step:hover { transform: translateY(-1px); border-color: var(--accent); }
+.daily-step.is-done { border-color: var(--ok); background: var(--ok-soft); }
+.daily-step:disabled { opacity: .5; }
+.daily-mark {
+  width: 22px; height: 22px; flex: none; border-radius: 50%;
+  border: 1px solid var(--line-strong); display: inline-flex;
+  align-items: center; justify-content: center; font-size: 13px; color: var(--ok);
+}
+.daily-step.is-done .daily-mark { border-color: var(--ok); }
+.daily-text { flex: 1; font-size: 14.5px; }
+
+.syllable-example .hanzi { font-size: 20px; vertical-align: -2px; margin: 0 2px; }
+
+.syllable-legend { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 12px; }
+.syllable-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-faint); }
+.syllable-legend i { width: 14px; height: 14px; border-radius: 5px; border: 1px solid var(--line-strong); }
+.syllable-legend i.learned { border-color: var(--ok); background: var(--ok-soft); }
+.syllable-legend i.work { border-color: var(--tone-warn); background: var(--tone-warn-soft); }
+
+.btn-round {
+  min-height: 56px; width: 56px; padding: 0; border-radius: 50%; font-size: 22px;
+}
+
+/* ——— Список слов ——— */
+.word-row {
+  display: flex; align-items: center; gap: 16px; width: 100%; text-align: left;
+  padding: 12px 16px; margin-bottom: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out);
+}
+.word-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
+.word-row .hanzi { font-size: 32px; flex: none; min-width: 104px; }
+.word-row .word-meta { flex: 1; min-width: 0; }
+.word-row .word-pinyin { color: var(--ink-faint); font-size: 14px; }
+.word-row .word-translation { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.word-row.is-locked { opacity: .45; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: var(--r-pill);
+  background: rgba(20, 22, 38, .05); color: var(--ink-faint);
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+}
+html[data-theme="dark"] .badge { background: rgba(255, 255, 255, .07); }
+.badge-accent { background: var(--accent-soft); color: var(--accent); }
+.badge-ok { background: var(--ok-soft); color: var(--ok); }
+.badge-err { background: var(--err-soft); color: var(--err); }
+
+/* ——— Прогресс ——— */
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center; }
+.stat-grid b { display: block; font-size: 30px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stat-grid span { font-size: 12.5px; color: var(--ink-faint); }
+.chart { width: 100%; height: 150px; display: block; overflow: visible; }
+.chart rect { fill: url(#chart-gradient); }
+.chart .chart-axis { stroke: var(--line-strong); stroke-width: 1; }
+.chart text { fill: var(--ink-ghost); font-size: 10px; font-family: var(--font-latin); }
+
+/* ——— Уровни ——— */
+.level-bar {
+  height: 10px; background: rgba(20, 22, 38, .06); border-radius: var(--r-pill);
+  overflow: hidden; margin: 10px 0 14px;
+}
+html[data-theme="dark"] .level-bar { background: rgba(255, 255, 255, .08); }
+.level-bar span { display: block; height: 100%; background: var(--accent-gradient); transition: width .4s var(--ease-spring); }
+
+/* ——— Грамматика ——— */
+.lesson-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 16px 18px; margin-bottom: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out);
+}
+.lesson-row:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.lesson-row .lesson-title { flex: 1; font-weight: 500; }
+.lesson-rule {
+  display: inline-block; padding: 10px 18px; border-radius: var(--r-pill);
+  background: var(--accent-gradient); color: #fff;
+  font-size: 14.5px; font-weight: 600; box-shadow: var(--shadow-accent);
+}
+html[data-theme="dark"] .lesson-rule { color: #0f1117; }
+.example-block { border-left: 2px solid var(--line-strong); padding-left: 18px; margin: 18px 0; }
+.chunk-slot {
+  min-height: 72px; padding: 10px;
+  border: 1px dashed var(--line-strong); border-radius: var(--r-lg);
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: var(--surface-soft);
+}
+.chunk {
+  font-family: var(--font-hanzi); font-size: 24px; padding: 10px 16px;
+  background: var(--surface-strong); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out);
+}
+.chunk:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.chunk.is-ok { border-color: var(--ok); background: var(--ok-soft); }
+.chunk.is-err { border-color: var(--err); background: var(--err-soft); }
+
+/* ——— Таблица предпросмотра ——— */
+.preview-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.preview-table th, .preview-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.preview-table th { color: var(--ink-ghost); font-weight: 500; font-size: 12px; }
+.preview-table .hanzi { font-size: 22px; }
+.table-wrap { overflow-x: auto; }
+
+/* ——— Ввод пиньиня: превью и памятка по тонам ——— */
+.pinyin-preview {
+  min-height: 34px; text-align: center;
+  font-size: 26px; font-weight: 500; color: var(--accent); letter-spacing: .01em;
+}
+.tone-legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.tone-legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--r-pill);
+  background: var(--surface-strong); border: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-faint);
+}
+.tone-legend-item b { font-size: 17px; color: var(--ink); font-weight: 500; }
+
+/* ——— Плитки тем ——— */
+.topic-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 560px) { .topic-grid { grid-template-columns: repeat(3, 1fr); } }
+.topic-tile {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 14px; min-height: 72px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out), border-color .2s var(--ease-out);
+}
+.topic-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.topic-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: var(--shadow-2), 0 0 0 1px var(--accent) inset; }
+.topic-tile svg { flex: none; }
+.topic-tile .topic-name { font-size: 13.5px; font-weight: 500; line-height: 1.25; }
+.topic-tile .topic-count { font-size: 12px; color: var(--ink-faint); }
+
+/* ——— Экзамены ——— */
+.exam-card { position: relative; }
+.exam-card.is-locked .exam-title { color: var(--ink-faint); }
+.exam-requirement { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13.5px; }
+.exam-requirement .exam-mark { flex: none; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; background: var(--line); color: var(--ink-faint); }
+.exam-requirement.is-done .exam-mark { background: var(--ok-soft); color: var(--ok); }
+
+/* ——— Достижения ——— */
+.badge-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 560px) { .badge-grid { grid-template-columns: repeat(3, 1fr); } }
+.achievement {
+  padding: 14px; border-radius: var(--r-lg); text-align: center;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+}
+.achievement.is-locked { opacity: .55; }
+.achievement .achievement-name { font-size: 13px; font-weight: 500; margin-top: 8px; }
+.achievement .achievement-note { font-size: 11.5px; color: var(--ink-faint); margin-top: 4px; }
+
+/* ——— Написание иероглифов ——— */
+/* Расходы на озвучку: суммы крупно, курс — сбоку и мелко */
+.cost-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+.cost-dash { color: var(--ink-faint); font-size: 22px; }
+.cost-sum {
+  font-size: 30px; font-weight: 600; letter-spacing: -.02em;
+  background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+.cost-rate { margin-left: auto; font-size: 12.5px; }
+
+/* Полоса скорости под квадратом прописи: подпись, ползунок, текущая ступень */
+.speed-bar {
+  display: flex; align-items: center; gap: 12px;
+  width: min(320px, 100%); margin: 12px auto 0;
+  padding: 8px 14px; border-radius: var(--r-pill);
+  background: var(--surface-strong); border: 1px solid var(--line);
+  font-size: 12.5px;
+}
+/* Свой ползунок: системная заливка слева от бегунка тут только мешает читать положение */
+.speed-range { flex: 1; min-width: 0; accent-color: auto; -webkit-appearance: none; appearance: none; background: transparent; }
+.speed-range::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px; background: var(--line-strong);
+}
+.speed-range::-moz-range-track { height: 4px; border-radius: 999px; background: var(--line-strong); }
+.speed-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -6px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); border: none;
+}
+.speed-range::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; border: none;
+  background: var(--accent);
+}
+.speed-range::-moz-range-progress { background: transparent; }
+
+.btn-arrow { padding: 0 14px; }
+.arrow-icon { width: 16px; height: 16px; display: block; }
+.speed-value { min-width: 92px; text-align: right; }
+
+.stroke-steps {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin-top: 12px; font-size: 12.5px;
+}
+
+.rule-examples { display: flex; gap: 10px; flex-wrap: wrap; }
+.rule-example {
+  width: 62px; height: 62px; display: grid; place-items: center;
+  font-family: var(--font-hanzi); font-size: 32px;
+  background: var(--surface-strong); border: 1px solid var(--line); border-radius: var(--r-lg);
+  transition: transform .2s var(--ease-spring), border-color .2s var(--ease-out);
+}
+.rule-example:hover { transform: translateY(-2px); border-color: var(--accent); }
+
+.chunk-pair { display: inline-flex; align-items: stretch; gap: 4px; }
+.chunk-sound {
+  padding: 0 8px; border-radius: var(--r-md, 12px);
+  background: var(--surface); border: 1px solid var(--line);
+  font-size: 13px; line-height: 1;
+}
+.chunk-sound:hover { border-color: var(--accent); }
+
+.stroke-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; margin-top: 20px;
+}
+.stroke-cell {
+  aspect-ratio: 1; display: grid; place-items: center;
+  font-family: var(--font-hanzi); font-size: 38px;
+  background: var(--surface-strong); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  /* размытие фона здесь давало мигающую полоску по краю при подъёме плитки
+     (Chrome пересобирает слой) — плитка и так на плотном фоне, размытие не нужно */
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out);
+}
+.stroke-cell:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.stroke-cell { width: 100%; }
+
+/* Плитка знака с отметкой «прописал в тетради» в углу */
+.stroke-slot { position: relative; }
+.stroke-mark {
+  position: absolute; top: -6px; right: -6px; z-index: 2;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--surface-solid); border: 1px solid var(--line-strong);
+  color: var(--ok); font-size: 13px; font-weight: 600; line-height: 1;
+  transition: transform .2s var(--ease-spring), border-color .2s var(--ease-out);
+}
+.stroke-mark:hover { transform: scale(1.1); border-color: var(--ok); }
+.stroke-mark.is-written { background: var(--ok-soft); border-color: var(--ok); }
+.stroke-slot:has(.stroke-mark.is-written) .stroke-cell { border-color: var(--ok); }
+.stroke-stage { width: min(320px, 100%); aspect-ratio: 1; margin: 0 auto; }
+.stroke-stage svg { display: block; width: 100%; height: 100%; }
+.stroke-grid-lines { stroke: var(--line-strong); stroke-width: 2; stroke-dasharray: 10 12; }
+.stroke-frame { fill: none; stroke: var(--line); stroke-width: 2; }
+.stroke-ghost { fill: var(--ink); opacity: .09; }
+.stroke-done { fill: var(--ink); }
+.stroke-live { stroke: var(--accent); fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.stroke-counter { font-variant-numeric: tabular-nums; color: var(--ink-faint); font-size: 13.5px; }
+
+/* ——— Разговоры ——— */
+.bubble {
+  max-width: 82%; padding: 14px 18px; border-radius: var(--r-lg);
+  background: var(--surface-strong); border: 1px solid var(--line); box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+}
+.bubble-row { display: flex; margin-bottom: 12px; }
+.bubble-row.is-you { justify-content: flex-end; }
+.bubble-row.is-you .bubble { background: var(--accent-gradient); color: #fff; border-color: transparent; box-shadow: var(--shadow-accent); }
+html[data-theme="dark"] .bubble-row.is-you .bubble { color: #0f1117; }
+.bubble .hanzi { font-size: 22px; line-height: 1.6; }
+.bubble .bubble-pinyin { font-size: 13.5px; color: var(--ink-faint); }
+.bubble-row.is-you .bubble .bubble-pinyin { color: rgba(255, 255, 255, .8); }
+.bubble .bubble-translation { font-size: 14.5px; }
+.dialog-task { margin: 20px 0; }
+.word-bank { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.word-bank .chip { font-family: var(--font-hanzi); font-size: 18px; cursor: default; }
+
+/* ——— Подтверждение опасного действия ——— */
+.overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center; padding: 16px;
+  background: rgba(20, 22, 38, .35);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.overlay .card { max-width: 460px; width: 100%; box-shadow: var(--shadow-3); background: var(--surface-strong); }
+
+/* ——— Строка примера со звуком (уроки пиньиня) ——— */
+.sound-row {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px 16px; margin-bottom: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+}
+.sound-play {
+  flex: none; width: 42px; height: 42px; border-radius: var(--r-pill);
+  display: grid; place-items: center; font-size: 15px; color: #fff;
+  background: var(--accent-gradient); box-shadow: var(--shadow-accent);
+  transition: transform .2s var(--ease-spring);
+}
+.sound-play:hover:not(:disabled) { transform: scale(1.06); }
+.sound-play:disabled { opacity: .4; }
+.sound-body { flex: 1; min-width: 0; }
+.sound-pinyin { font-size: 19px; font-weight: 500; color: var(--accent); margin-left: 10px; }
+.sound-hint { font-size: 13px; color: var(--ink-faint); margin-top: 6px; line-height: 1.45; }
+
+/* ——— Значок игрока в шапке ——— */
+.player-badge {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: var(--r-pill);
+  background: var(--surface-strong); border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  transition: transform .2s var(--ease-spring);
+}
+.player-badge:hover { transform: translateY(-1px); }
+.player-level { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ——— Кнопка «во весь экран» ——— */
+.fullscreen-btn {
+  position: fixed; right: 16px; z-index: 35;
+  bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  width: 46px; height: 46px; border-radius: var(--r-pill);
+  display: grid; place-items: center; font-size: 17px; color: var(--ink-soft);
+  background: var(--surface-strong); border: 1px solid var(--line); box-shadow: var(--shadow-2);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .2s var(--ease-spring), box-shadow .2s var(--ease-out);
+}
+.fullscreen-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-3); }
+/* На экране тренировки нижней навигации нет — кнопка опускается ниже */
+body.is-training .fullscreen-btn { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+
+/* ——— Уведомление ——— */
+.toast {
+  position: fixed; left: 50%; bottom: 96px; transform: translate(-50%, 12px); z-index: 60;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 14px 22px; border-radius: var(--r-pill);
+  background: var(--ink); color: var(--bg);
+  font-size: 14.5px; font-weight: 500; text-align: center;
+  box-shadow: var(--shadow-3);
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s var(--ease-out), transform .25s var(--ease-spring);
+}
+.toast.is-open { opacity: 1; transform: translate(-50%, 0); }
+.toast.is-err { background: var(--err); color: #fff; }
+
+.hidden { display: none !important; }
+
+@media (max-width: 420px) {
+  main { padding: calc(var(--header-h, 60px) + 20px) 12px 124px; }
+  .card { padding: 20px 16px; }
+  .word-row .hanzi { min-width: 88px; font-size: 28px; }
+  .mode-btn { font-size: 11px; }
+  /* Вкладок шесть — на узком экране подписи мельче, иначе не помещаются */
+  .tabbar { padding: 5px; gap: 0; }
+  .tab { font-size: 9.5px; }
+  .tab-icon { font-size: 16px; }
+  .bubble { max-width: 90%; }
+  .hint-keys { display: none; }   /* на телефоне клавиатуры нет */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<!-- ═══════════════════ HTML — разметка экранов ═══════════════════ -->
+
+<!-- Амбиентное свечение под интерфейсом: три размытых пятна, ничего не перехватывают -->
+<div class="scene" aria-hidden="true">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<header class="app-header">
+  <span class="app-logo hanzi" aria-hidden="true">汉</span>
+  <span class="app-title" id="header-title">Китайский с нуля</span>
+  <span id="player-slot"></span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="Переключить светлую и тёмную тему"></button>
+</header>
+
+<main>
+  <!-- ——— Главная ——— -->
+  <section class="screen is-active" id="screen-home" aria-labelledby="home-heading">
+    <h1 id="home-heading" class="hidden">Главная</h1>
+
+    <div id="teacher-card"></div>
+
+    <div id="daily-card"></div>
+
+    <div class="card center">
+      <div class="today-count"><span id="due-heading">Сегодня к повторению</span><b id="due-count">0</b><span id="due-label">слов</span></div>
+      <p class="faint" id="due-hint">Готово на сегодня</p>
+      <button class="btn btn-wide" id="start-btn" type="button">Начать</button>
+    </div>
+
+    <h2>Режим тренировки</h2>
+    <div class="mode-grid" id="mode-grid"></div>
+    <p class="faint" id="mode-description">Иероглиф → перевод, выбор из четырёх вариантов.</p>
+
+    <h2>Тема</h2>
+    <div class="chip-scroll" id="topic-filter"></div>
+
+    <h2>Уровень</h2>
+    <div class="card" id="level-card"></div>
+  </section>
+
+  <!-- ——— Тренировка ——— -->
+  <section class="screen" id="screen-train" aria-labelledby="train-heading">
+    <h1 id="train-heading" class="hidden">Тренировка</h1>
+    <div class="row-between" style="margin-bottom:12px">
+      <button class="btn-quiet btn btn-small" id="train-exit" type="button">← Выйти</button>
+      <span class="faint" id="train-counter"></span>
+    </div>
+    <div class="progress-line"><span id="train-progress" style="width:0%"></span></div>
+
+    <div id="train-body"></div>
+    <p class="verdict" id="train-verdict" role="status" aria-live="polite"></p>
+    <div class="center" style="margin-top:16px"><div id="train-actions"></div></div>
+    <p class="hint-keys" id="train-keys"></p>
+  </section>
+
+  <!-- ——— Слова ——— -->
+  <section class="screen" id="screen-dict" aria-labelledby="dict-heading">
+    <h1 id="dict-heading">Слова</h1>
+    <div class="stack">
+      <input type="search" id="dict-search" placeholder="Поиск: иероглиф, пиньинь или перевод" aria-label="Поиск по словам">
+      <div class="row">
+        <button class="btn btn-small" id="dict-add-btn" type="button">+ Добавить слово</button>
+        <button class="btn btn-quiet btn-small" id="dict-import-btn" type="button">Вставить список</button>
+      </div>
+      <div class="chip-scroll" id="dict-topics"></div>
+    </div>
+    <p class="faint" id="dict-count"></p>
+    <div id="dict-list"></div>
+  </section>
+
+  <!-- ——— Добавление слова ——— -->
+  <section class="screen" id="screen-add" aria-labelledby="add-heading">
+    <h1 id="add-heading">Новое слово</h1>
+    <form id="add-form" class="card">
+      <div class="field">
+        <label for="add-hanzi">Иероглифы</label>
+        <input type="text" id="add-hanzi" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="add-pinyin">Пиньинь (можно цифрами: ni3 hao3)</label>
+        <input type="text" id="add-pinyin" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="add-translation">Перевод</label>
+        <input type="text" id="add-translation" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="add-topic">Тема</label>
+        <input type="text" id="add-topic" list="topic-options" autocomplete="off" placeholder="Например: Еда">
+        <datalist id="topic-options"></datalist>
+      </div>
+      <div class="field">
+        <label for="add-example">Пример предложения (необязательно)</label>
+        <input type="text" id="add-example" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="add-example-translation">Перевод примера</label>
+        <input type="text" id="add-example-translation" autocomplete="off">
+      </div>
+      <div class="row" style="margin-top:24px">
+        <button class="btn" type="submit">Сохранить</button>
+        <button class="btn btn-quiet" type="button" data-go="dict">Отмена</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ——— Массовый импорт списка ——— -->
+  <section class="screen" id="screen-bulk" aria-labelledby="bulk-heading">
+    <h1 id="bulk-heading">Вставить список слов</h1>
+    <p class="muted">Каждое слово с новой строки. Можно так: <code>你好;ni3 hao3;привет</code> —
+      иероглифы, пиньинь и перевод через точку с запятой. Можно вставить просто иероглифы —
+      пиньинь и перевод подставятся из встроенного словаря, где они известны.</p>
+    <textarea id="bulk-input" placeholder="你好;ni3 hao3;привет&#10;谢谢;xie4 xie;спасибо"></textarea>
+    <div class="row" style="margin-top:16px">
+      <button class="btn" id="bulk-check" type="button">Проверить</button>
+      <button class="btn btn-quiet" type="button" data-go="dict">Отмена</button>
+    </div>
+    <div id="bulk-preview"></div>
+  </section>
+
+  <!-- ——— Грамматика: порядок слов и разговоры ——— -->
+  <section class="screen" id="screen-grammar" aria-labelledby="grammar-heading">
+    <h1 id="grammar-heading">Порядок слов</h1>
+    <div class="chip-scroll" id="grammar-tabs">
+      <button class="chip" type="button" data-grammar-tab="rules" aria-pressed="true">Порядок слов</button>
+      <button class="chip" type="button" data-grammar-tab="dialogs" aria-pressed="false">Разговоры</button>
+    </div>
+    <div id="grammar-rules">
+      <p class="muted">Главная беда новичка — не слова, а их расстановка. Здесь по одному правилу
+        за раз: сначала объяснение простыми словами, потом сборка фраз из кусков.</p>
+      <div id="lesson-list"></div>
+    </div>
+    <div id="grammar-dialogs" class="hidden">
+      <p class="muted">Живые сценки: тебе отвечает собеседник, а свои реплики ты печатаешь
+        по-китайски сам. Проверяется и смысл, и порядок слов.</p>
+      <div id="dialog-list"></div>
+    </div>
+  </section>
+
+  <!-- ——— Пиньинь: таблица слогов, уроки чтения, тренировки на слух ——— -->
+  <section class="screen" id="screen-pinyin" aria-labelledby="pinyin-heading">
+    <h1 id="pinyin-heading">Слоги</h1>
+    <div class="chip-scroll" id="pinyin-tabs">
+      <button class="chip" type="button" data-pinyin-tab="table" aria-pressed="true">Таблица слогов</button>
+      <button class="chip" type="button" data-pinyin-tab="lessons" aria-pressed="false">Правила чтения</button>
+      <button class="chip" type="button" data-pinyin-tab="drill" aria-pressed="false">Тренировка</button>
+    </div>
+    <div id="syllable-progress"></div>
+    <div id="pinyin-table">
+      <p class="muted">Все слоги китайского языка. Слева — конец слога, сверху — начало.
+        Нажми любую клетку: услышишь слог и увидишь, как он читается по-русски.</p>
+      <div class="syllable-scroll" id="syllable-table"></div>
+      <div id="syllable-hint"></div>
+    </div>
+    <div id="pinyin-lessons" class="hidden">
+      <p class="muted">Разбор самого чтения: какие звуки прячутся за латинскими буквами, где
+        смягчение, что меняется на ходу. У каждого примера есть звук — слушай и повторяй.</p>
+      <div id="pinyin-list"></div>
+    </div>
+    <div id="pinyin-drill" class="hidden">
+      <p class="muted">Только слоги, без слов и предложений: играет слог — узнаёшь его на слух.
+        Можно гонять всю таблицу, отдельную строку или столбец. Тон писать не нужно.</p>
+      <div id="pinyin-drill-list"></div>
+    </div>
+  </section>
+
+  <!-- ——— Тренировка слогов на слух ——— -->
+  <section class="screen" id="screen-syllable-drill" aria-labelledby="syllable-drill-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="pinyin">← К слогам</button>
+    <h1 id="syllable-drill-heading" style="margin-top:16px">Слушай и пиши</h1>
+    <div id="syllable-drill-body"></div>
+    <p class="hint-keys">1–4 — выбрать · S — повторить звук · 0 — не знаю · Enter — дальше · Esc — выйти</p>
+  </section>
+
+  <!-- ——— Один разговор ——— -->
+  <section class="screen" id="screen-dialog" aria-labelledby="dialog-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="grammar">← К разговорам</button>
+    <h1 id="dialog-heading" style="margin-top:16px"></h1>
+    <p class="muted" id="dialog-intro"></p>
+    <div id="dialog-thread"></div>
+  </section>
+
+
+  <!-- ——— Урок пиньиня ——— -->
+  <section class="screen" id="screen-pinyin-lesson" aria-labelledby="pinyin-lesson-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="pinyin">← К правилам</button>
+    <h1 id="pinyin-lesson-heading" style="margin-top:16px"></h1>
+    <div id="pinyin-lesson-body"></div>
+  </section>
+
+  <!-- ——— Диктант пиньиня ——— -->
+  <section class="screen" id="screen-pinyin-dictation" aria-labelledby="pinyin-dictation-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="pinyin">← К слогам</button>
+    <h1 id="pinyin-dictation-heading" style="margin-top:16px">Диктант</h1>
+    <div id="pinyin-dictation-body"></div>
+  </section>
+  <!-- ——— Написание иероглифов ——— -->
+  <section class="screen" id="screen-strokes" aria-labelledby="strokes-heading">
+    <h1 id="strokes-heading">Написание</h1>
+    <p class="muted">Черты пишутся в строгом порядке — от него зависит и вид знака, и то, поймут ли
+      тебя. Здесь иероглифы из слов, которые ты уже начал учить.</p>
+    <div class="card" style="margin-bottom:16px">
+      <div class="row-between">
+        <div>
+          <b>Правила написания</b>
+          <div class="faint">Почему черты идут именно в таком порядке</div>
+        </div>
+        <button class="btn btn-quiet btn-small" type="button" id="strokes-rules-open">Разобраться</button>
+      </div>
+    </div>
+
+    <input type="search" id="strokes-search" placeholder="Найти иероглиф" aria-label="Поиск иероглифа">
+    <div id="strokes-grid"></div>
+  </section>
+
+  <!-- ——— Режим учителя ——— -->
+  <section class="screen" id="screen-teacher" aria-labelledby="teacher-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="home">← На главную</button>
+    <h1 id="teacher-heading" style="margin-top:16px">Режим учителя</h1>
+    <p class="muted">Программа на месяц: каждый день своя тема, слова, письмо и разговорные фразы.
+      Занимайся сам сколько угодно — сюда всегда возвращаешься на то место, где остановился.</p>
+    <div id="teacher-body"></div>
+  </section>
+
+  <!-- ——— День программы ——— -->
+  <section class="screen" id="screen-teacher-day" aria-labelledby="teacher-day-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="teacher">← К программе</button>
+    <h1 id="teacher-day-heading" style="margin-top:16px"></h1>
+    <div id="teacher-day-body"></div>
+  </section>
+
+  <!-- ——— Задание программы ——— -->
+  <section class="screen" id="screen-teacher-task" aria-labelledby="teacher-task-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="teacher-day">← К дню</button>
+    <h1 id="teacher-task-heading" style="margin-top:16px"></h1>
+    <div id="teacher-task-body"></div>
+  </section>
+
+  <!-- ——— Прописи занятия (только из режима учителя) ——— -->
+  <section class="screen" id="screen-teacher-strokes" aria-labelledby="teacher-strokes-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="teacher-day">← К дню</button>
+    <h1 id="teacher-strokes-heading" style="margin-top:16px">Прописи занятия</h1>
+    <div id="teacher-strokes-body"></div>
+  </section>
+
+  <!-- ——— Правила порядка черт ——— -->
+  <section class="screen" id="screen-stroke-rules" aria-labelledby="stroke-rules-heading">
+    <button class="btn btn-quiet btn-small" type="button" id="stroke-rules-back">← К знакам</button>
+    <h1 id="stroke-rules-heading" style="margin-top:16px">Правила написания</h1>
+    <p class="muted">Порядок черт не случайный: он делает знак ровным и позволяет писать быстро,
+      не задумываясь. Правил немного, и они почти всегда работают вместе — сверху вниз и слева
+      направо. Нажми любой знак-пример, чтобы посмотреть, как он пишется.</p>
+    <div id="stroke-rules-body"></div>
+  </section>
+
+  <!-- ——— Один урок грамматики ——— -->
+  <section class="screen" id="screen-lesson" aria-labelledby="lesson-heading">
+    <button class="btn btn-quiet btn-small" type="button" data-go="grammar">← К списку</button>
+    <h1 id="lesson-heading" style="margin-top:16px"></h1>
+    <div id="lesson-body"></div>
+  </section>
+
+  <!-- ——— Прогресс, экзамены, достижения ——— -->
+  <section class="screen" id="screen-progress" aria-labelledby="progress-heading">
+    <h1 id="progress-heading">Прогресс</h1>
+    <div class="chip-scroll" id="progress-tabs">
+      <button class="chip" type="button" data-progress-tab="stats" aria-pressed="true">Прогресс</button>
+      <button class="chip" type="button" data-progress-tab="exams" aria-pressed="false">Экзамены</button>
+      <button class="chip" type="button" data-progress-tab="awards" aria-pressed="false">Достижения</button>
+    </div>
+    <div id="progress-body"></div>
+  </section>
+
+  <!-- ——— Настройки ——— -->
+  <section class="screen" id="screen-settings" aria-labelledby="settings-heading">
+    <h1 id="settings-heading">Настройки</h1>
+
+    <div class="card">
+      <b>Перенос на другое устройство</b>
+      <p class="faint">Слова и прогресс живут только в этом браузере. Чтобы продолжить с телефона
+        или с компьютера, отправь файл базы себе — например, в Telegram, — и открой его там
+        кнопкой «Загрузить».</p>
+      <div class="row">
+        <button class="btn btn-small" id="share-btn" type="button">
+          <span aria-hidden="true">⇪</span> Отправить файл</button>
+        <button class="btn btn-quiet btn-small" id="export-btn" type="button">Скачать файл</button>
+        <button class="btn btn-quiet btn-small" id="import-btn" type="button">Загрузить</button>
+        <input type="file" id="import-file" accept="application/json,.json" class="hidden">
+      </div>
+      <p class="faint" id="share-hint"></p>
+    </div>
+
+    <div class="card">
+      <b>Сколько стоила озвучка</b>
+      <div id="voice-cost"></div>
+    </div>
+
+    <div class="card">
+      <b>Работа без интернета</b>
+      <p class="faint">Само приложение работает офлайн сразу. А записи произношения подкачиваются
+        по мере прослушивания — нажми кнопку, чтобы забрать их все заранее (около 9 МБ).</p>
+      <button class="btn btn-quiet btn-small" id="offline-btn" type="button">Скачать всю озвучку</button>
+      <p class="faint" id="offline-status"></p>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <div><b>Тёмная тема</b><div class="faint">Переключается и кнопкой в шапке</div></div>
+        <button class="btn btn-quiet btn-small" id="settings-theme" type="button">Включить</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label for="rate-input">Скорость озвучки: <b id="rate-value">0.8</b></label>
+      <input type="range" id="rate-input" min="0.5" max="1" step="0.05" value="0.8" style="width:100%">
+      <p class="faint" id="voice-status">Проверяю голоса…</p>
+      <div class="row" style="gap:8px">
+        <button class="btn btn-quiet btn-small" id="rate-test" type="button">Проверить: 你好</button>
+        <button class="btn btn-quiet btn-small" id="sound-check" type="button">Разобраться, почему молчит</button>
+      </div>
+      <div id="sound-check-result"></div>
+    </div>
+
+    <div class="card">
+      <label for="limit-input">Слов за одну тренировку: <b id="limit-value">20</b></label>
+      <input type="range" id="limit-input" min="5" max="60" step="5" value="20" style="width:100%">
+      <p class="faint">Столько карточек попадёт в сессию. Остальные подождут следующего захода.</p>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <div><b>Версия приложения</b><div class="faint" id="app-version"></div></div>
+        <button class="btn btn-quiet btn-small" id="refresh-btn" type="button">Обновить</button>
+      </div>
+      <p class="faint">Если правки не появились — нажми «Обновить»: приложение заново заберёт
+        свежую версию с сервера. Выученные слова и прогресс при этом не трогаются.</p>
+    </div>
+
+    <div class="card hidden" id="install-card">
+      <b>Установить приложение</b>
+      <p class="faint">Появится отдельным окном, как обычная программа, и будет открываться без браузера.</p>
+      <button class="btn btn-small" id="install-btn" type="button">Установить</button>
+    </div>
+
+    <div class="card">
+      <b>Сброс</b>
+      <p class="faint">Удаляет прогресс повторений и статистику, слова остаются. Перед сбросом
+        выгрузи файл — вернуть будет неоткуда.</p>
+      <button class="btn btn-danger btn-small" id="reset-btn" type="button">Сбросить прогресс</button>
+    </div>
+
+    <p class="faint center" style="margin-top:24px">hanzi · офлайн · данные никуда не уходят</p>
+  </section>
+</main>
+
+<!-- Всплывающая карточка иероглифа -->
+<div class="sheet" id="char-sheet" role="dialog" aria-modal="false" aria-labelledby="char-sheet-title">
+  <div class="sheet-inner" id="char-sheet-body"></div>
+</div>
+
+<!-- Подтверждение действий, способных потерять данные -->
+<div class="overlay hidden" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+  <div class="card" id="dialog-body"></div>
+</div>
+
+<!-- Развернуть на весь экран -->
+<button class="fullscreen-btn" id="fullscreen-btn" type="button" aria-label="Развернуть на весь экран" title="Во весь экран">⤢</button>
+
+<!-- Нижняя навигация -->
+<nav class="tabbar" id="tabbar" aria-label="Разделы">
+  <button class="tab" type="button" data-go="home" aria-current="page"><span class="tab-icon" data-icon="home" aria-hidden="true"></span>Главная</button>
+  <button class="tab" type="button" data-go="dict"><span class="tab-icon hanzi" aria-hidden="true">字</span>Слова</button>
+  <button class="tab" type="button" data-go="pinyin"><span class="tab-icon hanzi" aria-hidden="true">拼</span>Слоги</button>
+  <button class="tab" type="button" data-go="grammar"><span class="tab-icon" data-icon="swap" aria-hidden="true"></span>Порядок</button>
+  <button class="tab" type="button" data-go="strokes"><span class="tab-icon hanzi" aria-hidden="true">笔</span>Черты</button>
+  <button class="tab" type="button" data-go="progress"><span class="tab-icon" data-icon="chart" aria-hidden="true"></span>Прогресс</button>
+  <button class="tab" type="button" data-go="settings"><span class="tab-icon" data-icon="gear" aria-hidden="true"></span>Ещё</button>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Код приложения разложен по модулям в js/. Порядок сборки задаёт js/main.js.
+     Сборщиков нет: браузер сам грузит модули по import. Открывать только через
+     локальный сервер (tools/serve.sh) — по file:// модули запрещены браузером. -->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

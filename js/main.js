@@ -1,0 +1,297 @@
+import { AUDIO_CACHE, DEFAULT_SESSION_LIMIT, DEFAULT_SPEECH_RATE, STORE_EXAMS, STORE_GRAMMAR, STORE_SRS, STORE_STATS, STORE_SYLLABLES, STORE_WORDS, USER_LEVEL } from './core/constants.js';
+import { database, dbGetAll, getSetting, connect, seedDatabaseIfEmpty, seedMissingWords, setSetting } from './core/db.js';
+import { pinyinNumbersToMarks } from './core/pinyin.js';
+import { speech } from './core/speech.js';
+import { state } from './core/state.js';
+import { cacheAllAudio, checkSound, exportToFile, importFromFile, renderSettings, resetProgress, shareDatabase, switchProgressTab, toggleTheme } from './core/stats.js';
+import { STROKE_SPEED_DEFAULT, STROKE_SPEED_MAX, STROKE_SPEED_MIN } from './core/strokes.js';
+import { CHAR_DICT_RAW } from './data/grammar.js';
+import { parseBulkInput, renderBulkPreview, renderDictionary, saveWord } from './ui/dict.js';
+import { switchGrammarTab, switchPinyinTab } from './ui/dictation.js';
+import { el, fill, toast } from './ui/dom.js';
+import { allTopics, renderHome } from './ui/home.js';
+import { ALL_TOPICS, uiIcon } from './ui/icons.js';
+import { showScreen } from './ui/screens.js';
+import { closeCharSheet, guessSentencePinyin } from './ui/sentence.js';
+import { renderStrokes } from './ui/strokes-screen.js';
+import { beginTraining, exitTraining, handleKeydown } from './ui/train.js';
+
+/* ═══════════════════ Запуск ═══════════════════ */
+
+export async function loadEverything() {
+  const [words, srsRecords, statsRecords, examRecords, grammarRecords, syllableRecords] =
+    await Promise.all([
+      dbGetAll(STORE_WORDS), dbGetAll(STORE_SRS), dbGetAll(STORE_STATS),
+      dbGetAll(STORE_EXAMS), dbGetAll(STORE_GRAMMAR), dbGetAll(STORE_SYLLABLES),
+    ]);
+  state.words = words;
+  state.srs = new Map(srsRecords.map((record) => [record.wordId, record]));
+  state.stats = new Map(statsRecords.map((record) => [record.date, record]));
+  state.exams = new Map(examRecords.map((record) => [record.level, record]));
+  state.grammarProgress = new Map(grammarRecords.map((record) => [record.lessonId, record]));
+  state.syllableProgress = new Map(syllableRecords.map((record) => [record.syllable, record]));
+  state.unlockedLevel = await getSetting('unlockedLevel', 1);
+  state.sessionLimit = await getSetting('sessionLimit', DEFAULT_SESSION_LIMIT);
+  speech.rate = await getSetting('speechRate', DEFAULT_SPEECH_RATE);
+  state.strokesSeen = new Set(await getSetting('strokesSeen', []));
+  state.strokesWritten = new Set(await getSetting('strokesWritten', []));
+  const savedSpeed = await getSetting('strokeSpeed', STROKE_SPEED_DEFAULT);
+  // прежние версии хранили ступени словами или номером — приводим к множителю скорости
+  const legacySpeeds = { slow: 0.5, normal: 1, fast: 1.8, 0: 0.35, 1: 0.55, 2: 1, 3: 1.8, 4: 2.6 };
+  const numeric = typeof savedSpeed === 'number' && savedSpeed >= STROKE_SPEED_MIN
+    ? savedSpeed
+    : legacySpeeds[savedSpeed];
+  state.strokeSpeed = Math.min(Math.max(numeric || STROKE_SPEED_DEFAULT, STROKE_SPEED_MIN), STROKE_SPEED_MAX);
+  state.pinyinSeen = new Set(await getSetting('pinyinSeen', []));
+  state.drillRun = await getSetting('drillRun', 0);
+  state.teacher = await getSetting('teacher', null);
+
+  const datalist = document.getElementById('topic-options');
+  fill(datalist, allTopics().filter((topic) => topic !== ALL_TOPICS)
+    .map((topic) => el('option', { value: topic })));
+}
+
+/** Держит `--header-h` равной реальной высоте шапки: при крупном системном шрифте
+    она выше, и содержимое экрана заезжало под неё (жалоба владельца 15.08.2026). */
+function trackHeaderHeight() {
+  const header = document.querySelector('.app-header');
+  const apply = () => {
+    document.documentElement.style.setProperty('--header-h', `${Math.ceil(header.offsetHeight)}px`);
+  };
+  apply();
+  if ('ResizeObserver' in window) new ResizeObserver(apply).observe(header);
+  window.addEventListener('resize', apply);
+}
+
+function bindEvents() {
+  // Из общего раздела правила открываются с возвратом туда же
+  document.getElementById('strokes-rules-open').addEventListener('click', () => {
+    state.strokeRulesBack = 'strokes';
+    showScreen('stroke-rules');
+  });
+
+  trackHeaderHeight();
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  document.getElementById('settings-theme').addEventListener('click', toggleTheme);
+  document.getElementById('start-btn').addEventListener('click', beginTraining);
+  document.getElementById('train-exit').addEventListener('click', exitTraining);
+
+  document.querySelectorAll('[data-go]').forEach((node) => {
+    node.addEventListener('click', () => showScreen(node.dataset.go));
+  });
+
+  document.getElementById('dict-add-btn').addEventListener('click', () => showScreen('add'));
+  document.getElementById('dict-import-btn').addEventListener('click', () => showScreen('bulk'));
+  document.getElementById('dict-search').addEventListener('input', (event) => {
+    state.dictSearch = event.target.value;
+    renderDictionary();
+  });
+
+  document.getElementById('strokes-search').addEventListener('input', (event) => {
+    state.strokesSearch = event.target.value;
+    renderStrokes();
+  });
+
+  document.querySelectorAll('[data-pinyin-tab]').forEach((button) => {
+    button.addEventListener('click', () => switchPinyinTab(button.dataset.pinyinTab));
+  });
+
+  document.querySelectorAll('[data-grammar-tab]').forEach((button) => {
+    button.addEventListener('click', () => switchGrammarTab(button.dataset.grammarTab));
+  });
+
+  document.querySelectorAll('[data-progress-tab]').forEach((button) => {
+    button.addEventListener('click', () => switchProgressTab(button.dataset.progressTab));
+  });
+
+  document.getElementById('add-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const hanzi = document.getElementById('add-hanzi').value.trim();
+    const translation = document.getElementById('add-translation').value.trim();
+    if (!hanzi || !translation) { toast('Нужны иероглифы и перевод.', true); return; }
+    const exampleHanzi = document.getElementById('add-example').value.trim();
+    try {
+      await saveWord({
+        hanzi,
+        pinyin: pinyinNumbersToMarks(document.getElementById('add-pinyin').value.trim()),
+        translation,
+        pos: '',
+        topic: document.getElementById('add-topic').value.trim() || 'Мои слова',
+        level: USER_LEVEL,
+        example: exampleHanzi ? {
+          hanzi: exampleHanzi,
+          pinyin: guessSentencePinyin(exampleHanzi),
+          translation: document.getElementById('add-example-translation').value.trim(),
+        } : null,
+      });
+      event.target.reset();
+      toast(`${hanzi} добавлено`);
+      showScreen('dict');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  document.getElementById('bulk-check').addEventListener('click', () => {
+    const text = document.getElementById('bulk-input').value;
+    state.bulkRows = parseBulkInput(text);
+    if (!state.bulkRows.length) { toast('Вставь хотя бы одну строку.', true); return; }
+    renderBulkPreview();
+  });
+
+  document.getElementById('rate-input').addEventListener('input', async (event) => {
+    speech.rate = Number(event.target.value);
+    document.getElementById('rate-value').textContent = speech.rate.toFixed(2);
+    await setSetting('speechRate', speech.rate);
+  });
+  document.getElementById('sound-check').addEventListener('click', checkSound);
+  document.getElementById('rate-test').addEventListener('click', () => {
+    if (!speech.speak('你好')) toast('Китайского голоса в системе нет.', true);
+  });
+
+  document.getElementById('limit-input').addEventListener('input', async (event) => {
+    state.sessionLimit = Number(event.target.value);
+    document.getElementById('limit-value').textContent = String(state.sessionLimit);
+    await setSetting('sessionLimit', state.sessionLimit);
+  });
+
+  document.getElementById('offline-btn').addEventListener('click', cacheAllAudio);
+  document.getElementById('share-btn').addEventListener('click', shareDatabase);
+  document.getElementById('export-btn').addEventListener('click', exportToFile);
+  document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
+  document.getElementById('import-file').addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) importFromFile(file);
+    event.target.value = '';
+  });
+  document.getElementById('reset-btn').addEventListener('click', resetProgress);
+
+  /**
+   * Принудительное обновление. Офлайн-кеш по своей природе показывает сохранённую копию,
+   * и на установленном приложении новая версия иногда ждёт закрытия всех окон. Эта кнопка
+   * снимает кеш и перезагружает страницу — данные пользователя лежат отдельно, в базе.
+   */
+  document.getElementById('refresh-btn').addEventListener('click', async () => {
+    toast('Забираю свежую версию…');
+    // Порядок важен: сперва убеждаемся, что сервер отвечает, и только потом трогаем
+    // сохранённую копию. Иначе при обрыве связи человек остаётся вообще без приложения
+    // (так и случилось у владельца 17.08.2026).
+    try {
+      const check = await fetch(`index.html?v=${Date.now()}`, { cache: 'no-store' });
+      if (!check.ok) throw new Error(String(check.status));
+    } catch (error) {
+      toast('Сервер сейчас не отвечает — оставляю рабочую копию как есть.', true);
+      return;
+    }
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      // кеш записей не трогаем: он не про версию, а качать его заново — девять мегабайт
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((key) => key !== AUDIO_CACHE).map((key) => caches.delete(key)));
+    } catch (error) {
+      // даже если что-то не вышло, перезагрузка всё равно подтянет новое
+    }
+    // Не reload(): он может взять страницу из кеша браузера — уходим на адрес с меткой
+    window.location.replace(`${location.pathname}?v=${Date.now()}`);
+  });
+  document.getElementById('install-btn').addEventListener('click', async () => {
+    if (!state.installPrompt) return;
+    state.installPrompt.prompt();
+    await state.installPrompt.userChoice;
+    state.installPrompt = null;
+    renderSettings();
+  });
+
+  // Полный экран: в установленном приложении окно всё равно остаётся окном, отсюда и кнопка.
+  const fullscreenButton = document.getElementById('fullscreen-btn');
+  const syncFullscreenButton = () => {
+    const isFull = Boolean(document.fullscreenElement);
+    fullscreenButton.textContent = isFull ? '⤡' : '⤢';
+    fullscreenButton.setAttribute('aria-label', isFull ? 'Свернуть из полного экрана' : 'Развернуть на весь экран');
+    fullscreenButton.title = isFull ? 'Свернуть' : 'Во весь экран';
+  };
+  fullscreenButton.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch (error) {
+      toast('Браузер не дал развернуть на весь экран.', true);
+    }
+  });
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
+  syncFullscreenButton();
+
+  document.addEventListener('keydown', handleKeydown);
+  document.addEventListener('click', (event) => {
+    const sheet = document.getElementById('char-sheet');
+    if (sheet.classList.contains('is-open') && !sheet.contains(event.target)
+      && !event.target.closest('.sentence') && !event.target.closest('.word-row')
+      && !event.target.closest('.syllable-cell')) closeCharSheet();
+  });
+}
+
+export async function start() {
+  try {
+    CHAR_DICT_RAW.forEach((line) => {
+      const [character, pinyin, translation] = line.split('|');
+      state.charDict.set(character, { pinyin, translation });
+    });
+
+    await connect();
+    await seedDatabaseIfEmpty();
+    const addedWords = await seedMissingWords();
+
+    // Дизайн-система светлая по замыслу, поэтому тёмная тема — только по явному выбору.
+    const savedTheme = await getSetting('theme', 'light');
+    document.documentElement.dataset.theme = savedTheme;
+    fill('theme-toggle', uiIcon(savedTheme === 'dark' ? 'sun' : 'moon', 20));
+    // Значки нижней навигации рисуем сами: символы шрифта в каждой системе свои
+    document.querySelectorAll('.tab-icon[data-icon]').forEach((slot) => {
+      slot.append(uiIcon(slot.dataset.icon, 20));
+    });
+
+    await loadEverything();
+    bindEvents();
+    await speech.init();
+
+    showScreen('home');
+    if (addedWords) toast(`В обновлении новых слов: ${addedWords}`);
+
+    // По file:// Service Worker запрещён браузером — регистрировать его там бессмысленно.
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').then((registration) => {
+        registration.update();   // спрашиваем сервер о новой версии при каждом запуске
+      }).catch(() => {
+        // Без Service Worker приложение просто не будет работать офлайн — не повод падать.
+      });
+      // И ещё раз — когда человек возвращается к приложению после паузы
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        navigator.serviceWorker.getRegistration().then((registration) => {
+          if (registration) registration.update();
+        });
+      });
+      // Новая версия применяется сама, но человек должен понимать, почему всё вдруг изменилось.
+      let hadController = Boolean(navigator.serviceWorker.controller);
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController) toast('Приложение обновилось до новой версии.');
+        hadController = true;
+      });
+    }
+  } catch (error) {
+    document.querySelector('main').prepend(el('div', { class: 'card' }, [
+      el('h2', { text: 'Приложение не смогло открыть базу данных' }),
+      el('p', { text: String(error && error.message ? error.message : error) }),
+      el('p', { class: 'faint', text: 'Чаще всего это значит, что файл открыт двойным кликом. Открой через локальный сервер: bash tools/serve.sh, адрес http://localhost:8321' }),
+    ]));
+  }
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  state.installPrompt = event;
+  if (state.screen === 'settings') renderSettings();
+});
+
+start();
