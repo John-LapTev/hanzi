@@ -1,0 +1,127 @@
+/* ═══════════════════ SYLLABLES — таблица слогов ═══════════════════
+   Просьба владельца (15.08.2026): он учил китайский раньше и забыл, как звучат
+   некоторые слоги. Нужна вся таблица целиком — послушать любую клетку и научиться
+   записывать слог на слух. Таблица построена как обычная сетка «инициаль × финаль»,
+   озвучен каждый слог. Тон везде первый, кроме слогов, которых в первом тоне нет:
+   такие звучат в своём (например, lái) — это подписано в карточке слога.          */
+
+export const SYLLABLE_INITIALS = ['b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h',
+  'j', 'q', 'x', 'zh', 'ch', 'sh', 'r', 'z', 'c', 's'];
+
+export const SYLLABLE_ROWS = [
+  { final: 'a', alone: 'a', cells: { b:'ba', p:'pa', m:'ma', f:'fa', d:'da', t:'ta', n:'na', l:'la', g:'ga', k:'ka', h:'ha', zh:'zha', ch:'cha', sh:'sha', z:'za', c:'ca', s:'sa' } },
+  { final: 'ai', alone: 'ai', cells: { b:'bai', p:'pai', m:'mai', d:'dai', t:'tai', n:'nai', l:'lai', g:'gai', k:'kai', h:'hai', zh:'zhai', ch:'chai', sh:'shai', z:'zai', c:'cai', s:'sai' } },
+  { final: 'an', alone: 'an', cells: { b:'ban', p:'pan', m:'man', f:'fan', d:'dan', t:'tan', n:'nan', l:'lan', g:'gan', k:'kan', h:'han', zh:'zhan', ch:'chan', sh:'shan', r:'ran', z:'zan', c:'can', s:'san' } },
+  { final: 'ang', alone: 'ang', cells: { b:'bang', p:'pang', m:'mang', f:'fang', d:'dang', t:'tang', n:'nang', l:'lang', g:'gang', k:'kang', h:'hang', zh:'zhang', ch:'chang', sh:'shang', r:'rang', z:'zang', c:'cang', s:'sang' } },
+  { final: 'ao', alone: 'ao', cells: { b:'bao', p:'pao', m:'mao', d:'dao', t:'tao', n:'nao', l:'lao', g:'gao', k:'kao', h:'hao', zh:'zhao', ch:'chao', sh:'shao', r:'rao', z:'zao', c:'cao', s:'sao' } },
+  { final: 'e', alone: 'e', cells: { m:'me', d:'de', t:'te', n:'ne', l:'le', g:'ge', k:'ke', h:'he', zh:'zhe', ch:'che', sh:'she', r:'re', z:'ze', c:'ce', s:'se' } },
+  { final: 'ei', alone: 'ei', cells: { b:'bei', p:'pei', m:'mei', f:'fei', d:'dei', n:'nei', l:'lei', g:'gei', h:'hei', sh:'shei', z:'zei' } },
+  { final: 'en', alone: 'en', cells: { b:'ben', p:'pen', m:'men', f:'fen', d:'den', n:'nen', g:'gen', k:'ken', h:'hen', zh:'zhen', ch:'chen', sh:'shen', r:'ren', z:'zen', c:'cen', s:'sen' } },
+  { final: 'eng', alone: 'eng', cells: { b:'beng', p:'peng', m:'meng', f:'feng', d:'deng', t:'teng', n:'neng', l:'leng', g:'geng', k:'keng', h:'heng', zh:'zheng', ch:'cheng', sh:'sheng', r:'reng', z:'zeng', c:'ceng', s:'seng' } },
+  { final: 'er', alone: 'er', cells: {  } },
+  { final: 'i', alone: 'yi', cells: { b:'bi', p:'pi', m:'mi', d:'di', t:'ti', n:'ni', l:'li', j:'ji', q:'qi', x:'xi', zh:'zhi', ch:'chi', sh:'shi', r:'ri', z:'zi', c:'ci', s:'si' } },
+  { final: 'ia', alone: 'ya', cells: { d:'dia', l:'lia', j:'jia', q:'qia', x:'xia' } },
+  { final: 'ian', alone: 'yan', cells: { b:'bian', p:'pian', m:'mian', d:'dian', t:'tian', n:'nian', l:'lian', j:'jian', q:'qian', x:'xian' } },
+  { final: 'iang', alone: 'yang', cells: { n:'niang', l:'liang', j:'jiang', q:'qiang', x:'xiang' } },
+  { final: 'iao', alone: 'yao', cells: { b:'biao', p:'piao', m:'miao', d:'diao', t:'tiao', n:'niao', l:'liao', j:'jiao', q:'qiao', x:'xiao' } },
+  { final: 'ie', alone: 'ye', cells: { b:'bie', p:'pie', m:'mie', d:'die', t:'tie', n:'nie', l:'lie', j:'jie', q:'qie', x:'xie' } },
+  { final: 'in', alone: 'yin', cells: { b:'bin', p:'pin', m:'min', n:'nin', l:'lin', j:'jin', q:'qin', x:'xin' } },
+  { final: 'ing', alone: 'ying', cells: { b:'bing', p:'ping', m:'ming', d:'ding', t:'ting', n:'ning', l:'ling', j:'jing', q:'qing', x:'xing' } },
+  { final: 'iong', alone: 'yong', cells: { j:'jiong', q:'qiong', x:'xiong' } },
+  { final: 'iu', alone: 'you', cells: { m:'miu', d:'diu', n:'niu', l:'liu', j:'jiu', q:'qiu', x:'xiu' } },
+  { final: 'o', alone: 'o', cells: { b:'bo', p:'po', m:'mo', f:'fo', l:'lo' } },
+  { final: 'ong', alone: '', cells: { d:'dong', t:'tong', n:'nong', l:'long', g:'gong', k:'kong', h:'hong', zh:'zhong', ch:'chong', r:'rong', z:'zong', c:'cong', s:'song' } },
+  { final: 'ou', alone: 'ou', cells: { p:'pou', m:'mou', f:'fou', d:'dou', t:'tou', n:'nou', l:'lou', g:'gou', k:'kou', h:'hou', zh:'zhou', ch:'chou', sh:'shou', r:'rou', z:'zou', c:'cou', s:'sou' } },
+  { final: 'u', alone: 'wu', cells: { b:'bu', p:'pu', m:'mu', f:'fu', d:'du', t:'tu', n:'nu', l:'lu', g:'gu', k:'ku', h:'hu', zh:'zhu', ch:'chu', sh:'shu', r:'ru', z:'zu', c:'cu', s:'su' } },
+  { final: 'ua', alone: 'wa', cells: { g:'gua', k:'kua', h:'hua', zh:'zhua', sh:'shua' } },
+  { final: 'uai', alone: 'wai', cells: { g:'guai', k:'kuai', h:'huai', ch:'chuai', sh:'shuai' } },
+  { final: 'uan', alone: 'wan', cells: { d:'duan', t:'tuan', n:'nuan', l:'luan', g:'guan', k:'kuan', h:'huan', zh:'zhuan', ch:'chuan', sh:'shuan', r:'ruan', z:'zuan', c:'cuan', s:'suan' } },
+  { final: 'uang', alone: 'wang', cells: { g:'guang', k:'kuang', h:'huang', zh:'zhuang', ch:'chuang', sh:'shuang' } },
+  { final: 'ue', alone: 'yue', cells: { n:'nüe', l:'lüe', j:'jue', q:'que', x:'xue' } },
+  { final: 'ueng', alone: 'weng', cells: {  } },
+  { final: 'ui', alone: 'wei', cells: { d:'dui', t:'tui', g:'gui', k:'kui', h:'hui', zh:'zhui', ch:'chui', sh:'shui', r:'rui', z:'zui', c:'cui', s:'sui' } },
+  { final: 'un', alone: 'wen', cells: { d:'dun', t:'tun', l:'lun', g:'gun', k:'kun', h:'hun', zh:'zhun', ch:'chun', sh:'shun', r:'run', z:'zun', c:'cun', s:'sun' } },
+  { final: 'uo', alone: 'wo', cells: { d:'duo', t:'tuo', n:'nuo', l:'luo', g:'guo', k:'kuo', h:'huo', zh:'zhuo', ch:'chuo', sh:'shuo', r:'ruo', z:'zuo', c:'cuo', s:'suo' } },
+  { final: 'v', alone: 'yu', cells: { n:'nü', l:'lü', j:'ju', q:'qu', x:'xu' } },
+  { final: 'van', alone: 'yuan', cells: { j:'juan', q:'quan', x:'xuan' } },
+  { final: 'vn', alone: 'yun', cells: { j:'jun', q:'qun', x:'xun' } },
+];
+
+/* Как звучит инициаль. Главное для русского уха: в китайском пары b/p, d/t, g/k
+   различаются не звонкостью, а придыханием — вторая произносится с выдохом. */
+export const INITIAL_HINTS = {
+  b: { ru: 'б', note: 'Как «б», но глуше — без голоса, ближе к «п» без выдоха.' },
+  p: { ru: 'пх', note: 'Как «п», но с сильным выдохом: подставь ладонь — почувствуешь толчок.' },
+  m: { ru: 'м', note: 'Как русское «м».' },
+  f: { ru: 'ф', note: 'Как русское «ф».' },
+  d: { ru: 'д', note: 'Как «д», но глуше — без голоса, «т» без выдоха.' },
+  t: { ru: 'тх', note: 'Как «т» с сильным выдохом.' },
+  n: { ru: 'н', note: 'Как русское «н».' },
+  l: { ru: 'л', note: 'Как русское «л», чуть мягче.' },
+  g: { ru: 'г', note: 'Как «г», но глуше — «к» без выдоха.' },
+  k: { ru: 'кх', note: 'Как «к» с сильным выдохом.' },
+  h: { ru: 'х', note: 'Как «х», с лёгким придыханием из глубины.' },
+  j: { ru: 'цзь', note: 'Мягкий, язык у нижних зубов. Похоже на «дзь» в «дзинь».' },
+  q: { ru: 'ць', note: 'Тот же мягкий звук, что j, но с сильным выдохом.' },
+  x: { ru: 'сь', note: 'Мягкое «сь», как в слове «сила».' },
+  zh: { ru: 'чж', note: 'Твёрдый: кончик языка загнут к нёбу. Как «дж» в «джем», но твёрже.' },
+  ch: { ru: 'чх', note: 'Тот же твёрдый звук, что zh, но с сильным выдохом.' },
+  sh: { ru: 'ш', note: 'Твёрдое «ш», язык загнут назад.' },
+  r: { ru: 'ж/р', note: 'Между «ж» и английским r. Язык загнут, но не дрожит.' },
+  z: { ru: 'цз', note: 'Как «дз» слитно, язык у зубов.' },
+  c: { ru: 'цх', note: 'Как «ц» с сильным выдохом.' },
+  s: { ru: 'с', note: 'Твёрдое «с».' },
+};
+
+/* Как звучит финаль. Ловушки помечены: именно на них теряется написание на слух. */
+export const FINAL_HINTS = {
+  a: { ru: 'а' },
+  ai: { ru: 'ай' },
+  an: { ru: 'ань', note: 'Кончик языка упирается в зубы, звук обрывается сразу. Гласная светлая, как в «дань».' },
+  ang: { ru: 'ан', note: 'Язык не касается зубов, звук уходит в нос и тянется. Гласная глубокая, как в английском song.' },
+  ao: { ru: 'ао' },
+  e: { ru: 'э', note: 'Не чистое «э»: звук глубже, с призвуком «ы».' },
+  ei: { ru: 'эй' },
+  en: { ru: 'энь', note: 'Язык у зубов, конец короткий. Сравни с -eng, где звук уходит в нос.' },
+  eng: { ru: 'эн', note: 'Язык внизу, звук гудит в носу и тянется дольше, чем в -en.' },
+  er: { ru: 'ар', note: 'Язык загнут вверх, «р» не рычит.' },
+  i: { ru: 'и', note: 'После zh, ch, sh, r, z, c, s это НЕ «и», а гудящий призвук: zhi, chi, shi, ri, zi, ci, si.' },
+  ia: { ru: 'я' },
+  ian: { ru: 'йень', note: 'Ловушка: пишется ian, а звучит «йень» — через «э», не «а».' },
+  iang: { ru: 'ян' },
+  iao: { ru: 'яо' },
+  ie: { ru: 'е' },
+  in: { ru: 'инь', note: 'Язык у зубов, обрывается быстро. Сравни с -ing.' },
+  ing: { ru: 'ин', note: 'Как английское -ing: звук уходит в нос и тянется.' },
+  iong: { ru: 'юн' },
+  iu: { ru: 'йоу', note: 'Ловушка: пишется iu, а звучит «йоу» — в середине прячется o.' },
+  o: { ru: 'о' },
+  ong: { ru: 'ун', note: 'Ловушка: пишется ong, а звучит ближе к «ун».' },
+  ou: { ru: 'оу' },
+  u: { ru: 'у' },
+  ua: { ru: 'уа' },
+  uai: { ru: 'уай' },
+  uan: { ru: 'уань', note: 'После j, q, x это «юань»: juan, quan, xuan.' },
+  uang: { ru: 'уан' },
+  ue: { ru: 'юэ', note: 'После n и l пишется с точками: nüe, lüe.' },
+  ueng: { ru: 'уэн', note: 'Встречается только без инициали — weng.' },
+  ui: { ru: 'уэй', note: 'Ловушка: пишется ui, а звучит «уэй» — в середине прячется e.' },
+  un: { ru: 'уэнь', note: 'Ловушка: пишется un, а звучит «уэнь». После j, q, x — «юнь».' },
+  uo: { ru: 'уо' },
+  v: { ru: 'юй', note: 'Тот самый ü: губы трубочкой, как для «у», а говоришь «и». После j, q, x точки не пишут.' },
+  van: { ru: 'юань' },
+  vn: { ru: 'юнь' },
+};
+
+/* Финали, которые чаще всего путают на слух: пары для отдельной тренировки. */
+export const SYLLABLE_TRAPS = [
+  { title: '-n или -ng', pairs: [['an', 'ang'], ['en', 'eng'], ['in', 'ing']],
+    note: 'В -n язык упирается в зубы и звук обрывается. В -ng язык лежит внизу, звук уходит в нос '
+      + 'и тянется, а гласная звучит глубже. Слушай не «мягко или твёрдо», а длину и глубину.' },
+  { title: 'с выдохом или без', pairs: [['b', 'p'], ['d', 't'], ['g', 'k'], ['z', 'c'], ['zh', 'ch'], ['j', 'q']],
+    note: 'Разница не в звонкости, а в выдохе: во второй букве воздух вырывается толчком.' },
+  { title: 'мягкие или твёрдые', pairs: [['j', 'zh'], ['q', 'ch'], ['x', 'sh']],
+    note: 'j, q, x — язык у нижних зубов, звук мягкий. zh, ch, sh — язык загнут назад, звук твёрдый.' },
+  { title: 'спрятанные буквы', pairs: [['iu', 'iou'], ['ui', 'uei'], ['un', 'uen']],
+    note: 'Пишется коротко, а звучит полностью: liu = «льоу», hui = «хуэй», lun = «луэнь».' },
+];
